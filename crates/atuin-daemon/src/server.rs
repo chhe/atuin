@@ -4,6 +4,7 @@ use atuin_client::encryption;
 use atuin_client::history::store::HistoryStore;
 use atuin_client::record::sqlite_store::SqliteStore;
 use atuin_client::settings::Settings;
+#[cfg(not(windows))]
 use std::path::PathBuf;
 use std::sync::Arc;
 use time::OffsetDateTime;
@@ -13,7 +14,13 @@ use atuin_client::database::{Database, Sqlite as HistoryDatabase};
 use atuin_client::history::{History, HistoryId};
 use dashmap::DashMap;
 use eyre::Result;
+#[cfg(windows)]
+use tokio::net::TcpListener;
+#[cfg(not(windows))]
 use tokio::net::UnixListener;
+#[cfg(windows)]
+use tokio_stream::wrappers::TcpListenerStream;
+#[cfg(not(windows))]
 use tokio_stream::wrappers::UnixListenerStream;
 use tonic::{transport::Server, Request, Response, Status};
 
@@ -134,6 +141,7 @@ impl HistorySvc for HistoryService {
     }
 }
 
+#[cfg(not(windows))]
 async fn shutdown_signal(socket: PathBuf) {
     let mut term = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
         .expect("failed to register sigterm handler");
@@ -168,11 +176,25 @@ pub async fn listen(
 
     let history = HistoryService::new(history_store.clone(), history_db.clone());
 
+    #[cfg(not(windows))]
     let socket = settings.daemon.socket_path.clone();
+    #[cfg(not(windows))]
     let uds = UnixListener::bind(socket.clone())?;
+    #[cfg(not(windows))]
     let uds_stream = UnixListenerStream::new(uds);
 
+    #[cfg(not(windows))]
     tracing::info!("listening on unix socket {:?}", socket);
+
+    #[cfg(windows)]
+    let address = format!("localhost:{}", settings.daemon.socket_path_or_port);
+    #[cfg(windows)]
+    let listener = TcpListener::bind(address.clone()).await?;
+    #[cfg(windows)]
+    let listener_stream = TcpListenerStream::new(listener);
+
+    #[cfg(windows)]
+    tracing::info!("listening on TCP socket {:?}", address);
 
     // start services
     tokio::spawn(sync::worker(
@@ -182,9 +204,16 @@ pub async fn listen(
         history_db,
     ));
 
+    #[cfg(not(windows))]
     Server::builder()
         .add_service(HistoryServer::new(history))
         .serve_with_incoming_shutdown(uds_stream, shutdown_signal(socket.into()))
+        .await?;
+
+    #[cfg(windows)]
+    Server::builder()
+        .add_service(HistoryServer::new(history))
+        .serve_with_incoming(listener_stream)
         .await?;
 
     Ok(())

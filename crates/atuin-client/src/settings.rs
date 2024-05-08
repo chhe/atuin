@@ -351,8 +351,8 @@ pub struct Daemon {
     /// The daemon will handle sync on an interval. How often to sync, in seconds.
     pub sync_frequency: u64,
 
-    /// The path to the unix socket used by the daemon
-    pub socket_path: String,
+    /// The path to the unix socket (on non windows) or port (on windows) used by the daemon
+    pub socket_path_or_port: String,
 }
 
 impl Default for Preview {
@@ -368,7 +368,7 @@ impl Default for Daemon {
         Self {
             enabled: false,
             sync_frequency: 300,
-            socket_path: "".to_string(),
+            socket_path_or_port: "".to_string(),
         }
     }
 }

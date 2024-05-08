@@ -1,6 +1,10 @@
 use eyre::{eyre, Result};
+#[cfg(not(windows))]
 use tokio::net::UnixStream;
-use tonic::transport::{Channel, Endpoint, Uri};
+#[cfg(not(windows))]
+use tonic::transport::Uri;
+use tonic::transport::{Channel, Endpoint};
+#[cfg(not(windows))]
 use tower::service_fn;
 
 use atuin_client::history::History;
@@ -15,13 +19,20 @@ pub struct HistoryClient {
 
 // Wrap the grpc client
 impl HistoryClient {
-    pub async fn new(path: String) -> Result<Self> {
+    pub async fn new(socket_path_or_port: String) -> Result<Self> {
+        #[cfg(not(windows))]
         let channel = Endpoint::try_from("http://atuin_local_daemon:0")?
             .connect_with_connector(service_fn(move |_: Uri| {
                 let path = path.to_string();
 
                 UnixStream::connect(path)
             }))
+            .await
+            .map_err(|_| eyre!("failed to connect to local atuin daemon. Is it running?"))?;
+
+        #[cfg(windows)]
+        let channel = Endpoint::try_from(format!("http://localhost:{}", socket_path_or_port))?
+            .connect()
             .await
             .map_err(|_| eyre!("failed to connect to local atuin daemon. Is it running?"))?;
 

@@ -315,11 +315,12 @@ impl Cmd {
         }
 
         if settings.daemon.enabled {
-            let resp =
-                atuin_daemon::client::HistoryClient::new(settings.daemon.socket_path.clone())
-                    .await?
-                    .start_history(h)
-                    .await?;
+            let resp = atuin_daemon::client::HistoryClient::new(
+                settings.daemon.socket_path_or_port.clone(),
+            )
+            .await?
+            .start_history(h)
+            .await?;
 
             // print the ID
             // we use this as the key for calling end
@@ -350,7 +351,7 @@ impl Cmd {
         // We will need to keep the old code around for a while.
         // At the very least, while this is opt-in
         if settings.daemon.enabled {
-            atuin_daemon::client::HistoryClient::new(settings.daemon.socket_path.clone())
+            atuin_daemon::client::HistoryClient::new(settings.daemon.socket_path_or_port.clone())
                 .await?
                 .end_history(id.to_string(), duration.unwrap_or(0), exit)
                 .await?;
